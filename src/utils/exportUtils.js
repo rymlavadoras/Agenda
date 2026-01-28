@@ -23,11 +23,41 @@ const getFileName = (program, extension) => {
   // Formatear fecha a dd-mm-aaaa
   let formattedDate = ''
   if (program.date) {
-    const date = new Date(program.date + 'T00:00:00')
-    const day = String(date.getDate()).padStart(2, '0')
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const year = date.getFullYear()
-    formattedDate = `${day}-${month}-${year}`
+    // Parsear fecha ISO (aaaa-mm-dd)
+    // El formato de program.date siempre es ISO: aaaa-mm-dd
+    const dateParts = program.date.split('-')
+    if (dateParts.length === 3 && dateParts[0].length === 4) {
+      // Formato ISO: aaaa-mm-dd -> convertir a dd-mm-aaaa
+      const year = dateParts[0]  // aaaa
+      const month = dateParts[1] // mm
+      const day = dateParts[2]   // dd
+      formattedDate = `${day}-${month}-${year}`
+    } else {
+      // Fallback: intentar parsear con Date
+      try {
+        const date = new Date(program.date)
+        if (!isNaN(date.getTime())) {
+          const day = String(date.getDate()).padStart(2, '0')
+          const month = String(date.getMonth() + 1).padStart(2, '0')
+          const year = date.getFullYear()
+          formattedDate = `${day}-${month}-${year}`
+        } else {
+          // Si no se puede parsear, usar fecha actual
+          const today = new Date()
+          const day = String(today.getDate()).padStart(2, '0')
+          const month = String(today.getMonth() + 1).padStart(2, '0')
+          const year = today.getFullYear()
+          formattedDate = `${day}-${month}-${year}`
+        }
+      } catch (e) {
+        // En caso de error, usar fecha actual
+        const today = new Date()
+        const day = String(today.getDate()).padStart(2, '0')
+        const month = String(today.getMonth() + 1).padStart(2, '0')
+        const year = today.getFullYear()
+        formattedDate = `${day}-${month}-${year}`
+      }
+    }
   } else {
     const today = new Date()
     const day = String(today.getDate()).padStart(2, '0')
@@ -43,25 +73,30 @@ const getFileName = (program, extension) => {
  * Configuración para html2canvas - según documentación oficial
  * https://html2canvas.hertzen.com/configuration
  */
-const getCanvasOptions = (previewElement) => {
+const getCanvasOptions = (previewElement, highQuality = false) => {
+  // Para compartir por WhatsApp, usar mayor calidad
+  const scale = highQuality ? 4 : 2
+  
   if (!previewElement) {
     return {
-      scale: 2,
+      scale: scale,
       useCORS: true,
       logging: false,
       backgroundColor: '#ffffff',
-      allowTaint: false
+      allowTaint: false,
+      pixelRatio: highQuality ? 2 : 1
     }
   }
 
   return {
-    scale: 2,
+    scale: scale,
     useCORS: true,
     logging: false,
     backgroundColor: '#ffffff',
     allowTaint: false,
     removeContainer: false,
     imageTimeout: 15000,
+    pixelRatio: highQuality ? 2 : 1,
     // NO especificar width/height - dejar que html2canvas calcule automáticamente
     onclone: (clonedDoc) => {
       const clonedElement = clonedDoc.getElementById('program-preview')
@@ -184,36 +219,42 @@ export const shareViaWhatsApp = async (program) => {
   }
 
   try {
-    // Usar configuración estándar - html2canvas calculará automáticamente las dimensiones
-    const canvasOptions = getCanvasOptions(previewElement)
+    // Usar configuración de alta calidad para compartir
+    const canvasOptions = getCanvasOptions(previewElement, true)
     
     const canvas = await html2canvas(previewElement, canvasOptions)
+    
+    // Convertir a blob con máxima calidad
+    const fileName = getFileName(program, 'png')
     
     canvas.toBlob(async (blob) => {
       if (!blob) {
         throw new Error('Error al crear el blob de la imagen')
       }
 
-      // Crear un archivo para compartir
-      const file = new File([blob], getFileName(program, 'png'), { type: 'image/png' })
+      // Crear un archivo para compartir con el nombre correcto
+      const file = new File([blob], fileName, { 
+        type: 'image/png',
+        lastModified: Date.now()
+      })
       
-      // Verificar si el navegador soporta Web Share API
+      // Verificar si el navegador soporta Web Share API con archivos
       if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({
-            title: `${meetingTypeLabels[program.meetingType] || 'Programa'} - ${program.date}`,
-            text: `Programa de ${meetingTypeLabels[program.meetingType] || 'reunión'} del ${program.date}`,
+            title: fileName.replace('.png', ''),
+            text: `Programa de ${meetingTypeLabels[program.meetingType] || 'reunión'}`,
             files: [file]
           })
         } catch (shareError) {
           // Si falla el share, abrir WhatsApp Web
-          openWhatsAppWeb(blob, program)
+          openWhatsAppWeb(blob, program, fileName)
         }
       } else {
         // Fallback: abrir WhatsApp Web
-        openWhatsAppWeb(blob, program)
+        openWhatsAppWeb(blob, program, fileName)
       }
-    }, 'image/png', 1.0)
+    }, 'image/png', 1.0) // Máxima calidad PNG
   } catch (error) {
     console.error('Error en shareViaWhatsApp:', error)
     throw new Error('Error al compartir por WhatsApp. Por favor, intente nuevamente.')
@@ -223,30 +264,33 @@ export const shareViaWhatsApp = async (program) => {
 /**
  * Abre WhatsApp Web con la imagen
  */
-const openWhatsAppWeb = (blob, program) => {
+const openWhatsAppWeb = (blob, program, fileName) => {
   const url = URL.createObjectURL(blob)
   const meetingTypeLabel = meetingTypeLabels[program.meetingType] || 'Programa'
-  const text = encodeURIComponent(`Programa de ${meetingTypeLabel} - ${program.date}`)
+  const text = encodeURIComponent(`Programa de ${meetingTypeLabel}`)
   const whatsappUrl = `https://wa.me/?text=${text}`
   
-  // Abrir WhatsApp Web
-  window.open(whatsappUrl, '_blank')
+  // Descargar la imagen primero con el nombre correcto
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName || getFileName(program, 'png')
+  link.style.display = 'none'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
   
-  // Mostrar instrucciones
+  // Abrir WhatsApp Web después de un breve delay
   setTimeout(() => {
-    alert('Se abrió WhatsApp Web. Por favor, adjunta la imagen descargada manualmente o usa la función de compartir de tu navegador.')
+    window.open(whatsappUrl, '_blank')
     
-    // Descargar la imagen para que el usuario la pueda adjuntar
-    const link = document.createElement('a')
-    link.href = url
-    link.download = getFileName(program, 'png')
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    
+    // Mostrar instrucciones
     setTimeout(() => {
-      URL.revokeObjectURL(url)
-    }, 100)
-  }, 500)
+      alert('La imagen se ha descargado con el nombre correcto. Por favor, adjunta la imagen descargada en WhatsApp Web.')
+      
+      setTimeout(() => {
+        URL.revokeObjectURL(url)
+      }, 1000)
+    }, 500)
+  }, 300)
 }
 
