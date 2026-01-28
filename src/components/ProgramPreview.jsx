@@ -18,7 +18,21 @@ const ProgramPreview = ({ program }) => {
   const formattedTime = useMemo(() => {
     if (!program.time) return ''
     const [hours, minutes] = program.time.split(':')
-    return `${hours}:${minutes}`
+    const hoursNum = parseInt(hours, 10)
+    const minutesNum = parseInt(minutes, 10) || 0
+    
+    // Convertir a formato 12 horas con AM/PM
+    let hours12 = hoursNum
+    const ampm = hoursNum >= 12 ? 'PM' : 'AM'
+    
+    if (hours12 === 0) {
+      hours12 = 12 // Medianoche
+    } else if (hours12 > 12) {
+      hours12 = hours12 - 12
+    }
+    
+    const minutesStr = String(minutesNum).padStart(2, '0')
+    return `${hours12}:${minutesStr} ${ampm}`
   }, [program.time])
 
   const meetingTypeLabel = meetingTypeLabels[program.meetingType] || program.meetingType

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import PointItem from './PointItem'
+import TimeInput12h from './TimeInput12h'
 import { meetingTypeLabels } from '../data/defaultData'
 
 const ProgramForm = ({ program, onProgramChange }) => {
@@ -107,13 +108,12 @@ const ProgramForm = ({ program, onProgramChange }) => {
           <label htmlFor="time" className="required">
             Hora
           </label>
-          <input
-            type="time"
+          <TimeInput12h
             id="time"
             value={localProgram.time}
-            onChange={(e) => handleInputChange('time', e.target.value)}
-            className="form-control"
+            onChange={(value) => handleInputChange('time', value)}
             required
+            className="form-control"
           />
         </div>
       </div>

@@ -234,6 +234,28 @@ body {
   gap: var(--spacing-md);
 }
 
+/* Input de hora formato 12 horas */
+.time-input-12h {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.time-input-12h .form-control {
+  flex: 1;
+}
+
+.time-input-12h select.form-control {
+  padding: 0.75rem;
+}
+
+.time-separator {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--color-text);
+  user-select: none;
+}
+
 @media (max-width: 768px) {
   .form-row {
     grid-template-columns: 1fr;
